@@ -21,8 +21,17 @@
     font-family: 'Cormorant Garamond', 'Hoefler Text', Georgia, serif;
     overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
     user-select: none;
     touch-action: none;
+  }
+  /* Belt-and-suspenders: kill long-press text selection / iOS magnifier on every element */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   #stage { position: fixed; inset: 0; overflow: hidden; }
@@ -1301,6 +1310,11 @@ const audio = (() => {
 })();
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
+// Belt-and-suspenders: kill the iOS / desktop right-click context menu and
+// any selectstart events globally, so long-press never spawns a selection bubble.
+window.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('selectstart', e => e.preventDefault());
+
 window.addEventListener('resize', resize);
 loadGallery();
 renderGallery();
