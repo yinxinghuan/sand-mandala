@@ -48,8 +48,15 @@
     font-size: 13px;
     letter-spacing: .35em;
     text-transform: uppercase;
+    display: flex; align-items: center; gap: 10px;
   }
   #brand b { color: var(--ink); font-weight: 400; letter-spacing: .25em; }
+  #brand .brand-logo {
+    height: 18px; width: auto;
+    opacity: .55;
+    transition: opacity .25s;
+  }
+  #brand:hover .brand-logo { opacity: .85; }
   #top .right {
     display: flex; gap: 8px; align-items: center;
     pointer-events: auto;
@@ -321,7 +328,10 @@
 </div>
 
 <div id="top">
-  <div id="brand">SAND <b>MANDALA</b></div>
+  <div id="brand">
+    <img class="brand-logo" src="img/aigram.svg" alt="Aigram" draggable="false">
+    <span>SAND <b>MANDALA</b></span>
+  </div>
   <div class="right">
     <button id="frame-btn" disabled>Frame ✦</button>
     <div class="pill" id="sym-pill">
