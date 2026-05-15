@@ -1,0 +1,1302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sand Mandala</title>
+<style>
+  :root {
+    --bg-deep:   #0a0612;
+    --bg-mid:    #1a1028;
+    --ink:       #f4ebd0;
+    --ink-soft:  rgba(244,235,208,.55);
+    --ink-faint: rgba(244,235,208,.18);
+    --gold:      #d6a93a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: radial-gradient(ellipse at 50% 45%, var(--bg-mid) 0%, var(--bg-deep) 75%);
+    color: var(--ink);
+    font-family: 'Cormorant Garamond', 'Hoefler Text', Georgia, serif;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: none;
+  }
+
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+  }
+  #bg-canvas   { z-index: 1; pointer-events: none; }
+  #sand-canvas { z-index: 2; }
+
+  /* ─ Top strip: brand · frame btn · symmetry ─ */
+  #top {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top));
+    left: 14px; right: 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #brand {
+    color: var(--ink-soft);
+    font-size: 13px;
+    letter-spacing: .35em;
+    text-transform: uppercase;
+  }
+  #brand b { color: var(--ink); font-weight: 400; letter-spacing: .25em; }
+  #top .right {
+    display: flex; gap: 8px; align-items: center;
+    pointer-events: auto;
+  }
+
+  .pill {
+    display: flex; gap: 4px;
+    background: rgba(20,12,32,.55);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--ink-faint);
+    border-radius: 999px;
+    padding: 4px;
+    font-size: 12px;
+    letter-spacing: .12em;
+  }
+  .pill button {
+    background: transparent;
+    color: var(--ink-soft);
+    border: 0; padding: 6px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    font: inherit;
+    transition: background .15s, color .15s, opacity .15s;
+  }
+  .pill button.active {
+    background: rgba(244,235,208,.14);
+    color: var(--ink);
+  }
+  .pill button:disabled { opacity: .35; cursor: default; }
+
+  /* ─ Frame button (special pill) ─ */
+  #frame-btn {
+    background: transparent;
+    color: var(--gold);
+    border: 1px solid rgba(214,169,58,.6);
+    padding: 7px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font: inherit; font-size: 12px;
+    letter-spacing: .25em; text-transform: uppercase;
+    transition: opacity .25s, transform .12s, box-shadow .25s, border-color .25s;
+    pointer-events: auto;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    background: rgba(20,12,32,.55);
+  }
+  #frame-btn:disabled {
+    opacity: .25; cursor: default; border-color: var(--ink-faint); color: var(--ink-soft);
+  }
+  #frame-btn:not(:disabled) {
+    box-shadow: 0 0 18px rgba(214,169,58,.18);
+  }
+  #frame-btn:not(:disabled):active { transform: scale(.96); }
+
+  /* ─ Gallery strip (left edge, vertical) ─ */
+  #gallery {
+    position: fixed;
+    left: 10px;
+    top: 50%; transform: translateY(-50%);
+    z-index: 9;
+    display: flex; flex-direction: column;
+    gap: 8px;
+    max-height: 70vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 6px;
+    scrollbar-width: none;
+    pointer-events: auto;
+  }
+  #gallery::-webkit-scrollbar { display: none; }
+  #gallery:empty { display: none; }
+  .thumb {
+    position: relative;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: #0a0612 center/cover no-repeat;
+    border: 1.5px solid rgba(214,169,58,.5);
+    cursor: pointer;
+    transition: transform .15s, border-color .15s, box-shadow .2s;
+    flex: 0 0 auto;
+  }
+  .thumb:hover { border-color: var(--gold); box-shadow: 0 0 12px rgba(214,169,58,.35); }
+  .thumb:active { transform: scale(.94); }
+  .thumb.editing {
+    border-color: var(--gold);
+    box-shadow: 0 0 14px rgba(214,169,58,.55);
+  }
+  .thumb .x {
+    position: absolute; top: -4px; right: -4px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: rgba(0,0,0,.7);
+    border: 1px solid var(--ink-faint);
+    color: var(--ink-soft);
+    font-size: 10px; line-height: 16px; text-align: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s;
+  }
+  .thumb:hover .x { opacity: 1; }
+  .thumb .x:hover { color: var(--ink); border-color: var(--ink); }
+
+  /* ─ Bottom area: timeline + palette ─ */
+  #bottom {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    display: flex; flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  #timeline {
+    pointer-events: auto;
+    width: min(420px, 80vw);
+    height: 28px;
+    background: rgba(20,12,32,.55);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--ink-faint);
+    border-radius: 999px;
+    position: relative;
+    cursor: pointer;
+    display: flex; align-items: center;
+    padding: 0 14px;
+  }
+  #timeline.empty { opacity: .35; }
+  #tl-track {
+    position: relative;
+    width: 100%; height: 4px;
+    background: var(--ink-faint);
+    border-radius: 2px;
+  }
+  #tl-fill {
+    position: absolute; left: 0; top: 0; height: 100%;
+    background: linear-gradient(90deg, rgba(214,169,58,.55), rgba(214,169,58,.85));
+    border-radius: 2px;
+    width: 0%;
+    transition: width .08s linear;
+  }
+  #tl-handle {
+    position: absolute;
+    top: 50%; left: 0;
+    width: 14px; height: 14px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: var(--ink);
+    box-shadow: 0 0 8px rgba(244,235,208,.45);
+    transition: left .08s linear;
+  }
+  #tl-time {
+    position: absolute;
+    right: 14px; top: -22px;
+    font-family: 'Courier New', monospace;
+    font-size: 10px; letter-spacing: .12em;
+    color: var(--ink-soft);
+  }
+
+  #palette {
+    pointer-events: auto;
+    display: flex; gap: 10px;
+    padding: 8px 12px;
+    background: rgba(20,12,32,.55);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border-radius: 999px;
+    border: 1px solid var(--ink-faint);
+  }
+  .swatch {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--ink-faint);
+    cursor: pointer;
+    transition: transform .12s ease, border-color .12s, box-shadow .12s;
+  }
+  .swatch:active { transform: scale(.94); }
+  .swatch.active {
+    border-color: var(--ink);
+    box-shadow: 0 0 12px rgba(244,235,208,.35);
+    transform: scale(1.12);
+  }
+
+  /* First-touch hint */
+  #hint {
+    position: fixed;
+    left: 50%; top: 38%;
+    transform: translateX(-50%);
+    color: var(--ink-soft);
+    font-size: 14px;
+    letter-spacing: .12em;
+    pointer-events: none;
+    z-index: 5;
+    text-align: center;
+    line-height: 1.7;
+    transition: opacity 1s ease;
+  }
+  #hint.hide { opacity: 0; }
+  #hint .pulse { color: var(--ink); animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  /* Bindu — sacred center; long-press to dissolve (release / let-go) */
+  #bindu {
+    position: fixed;
+    width: 50px; height: 50px;
+    transform: translate(-50%, -50%);
+    z-index: 6;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: opacity .35s;
+  }
+  #bindu[hidden] { display: block; opacity: 0; pointer-events: none; }
+  #bindu .dot {
+    position: absolute; inset: 14px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%,
+      rgba(244,235,208,.85) 0%,
+      rgba(214,169,58,.55) 40%,
+      rgba(244,235,208,.10) 75%,
+      transparent 100%);
+    box-shadow: 0 0 14px rgba(244,235,208,.30);
+    animation: bindu-breathe 3.6s ease-in-out infinite;
+  }
+  @keyframes bindu-breathe {
+    0%, 100% { transform: scale(1);   opacity: .85; }
+    50%      { transform: scale(1.18); opacity: 1; }
+  }
+  #bindu svg {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+    pointer-events: none;
+  }
+  #bindu .ring-track {
+    fill: none; stroke: rgba(244,235,208,.10); stroke-width: 2;
+  }
+  #bindu .ring-progress {
+    fill: none; stroke: rgba(244,235,208,.85); stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 132;            /* 2π × 21 ≈ 132 */
+    stroke-dashoffset: 132;
+    filter: drop-shadow(0 0 4px rgba(244,235,208,.6));
+  }
+  #bindu.holding .dot { animation-duration: 1.3s; }
+  #bindu.holding .ring-progress {
+    transition: stroke-dashoffset 1.4s linear;
+    stroke-dashoffset: 0;
+  }
+  #bindu.dissolving { opacity: 0; pointer-events: none; }
+
+  @media (max-width: 460px) {
+    #brand { font-size: 11px; }
+    #frame-btn { padding: 6px 10px; font-size: 11px; letter-spacing: .18em; }
+    .thumb { width: 44px; height: 44px; }
+    .swatch { width: 26px; height: 26px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="bg-canvas"></canvas>
+  <canvas id="sand-canvas"></canvas>
+  <div id="bindu" hidden>
+    <svg viewBox="0 0 50 50">
+      <circle class="ring-track"    cx="25" cy="25" r="21" />
+      <circle class="ring-progress" cx="25" cy="25" r="21" />
+    </svg>
+    <div class="dot"></div>
+  </div>
+</div>
+
+<div id="top">
+  <div id="brand">SAND <b>MANDALA</b></div>
+  <div class="right">
+    <button id="frame-btn" disabled>Frame ✦</button>
+    <div class="pill" id="sym-pill">
+      <button data-n="4">4</button>
+      <button data-n="6">6</button>
+      <button data-n="8" class="active">8</button>
+      <button data-n="12">12</button>
+    </div>
+  </div>
+</div>
+
+<div id="gallery"></div>
+
+<div id="bottom">
+  <div id="timeline" class="empty">
+    <div id="tl-track">
+      <div id="tl-fill"></div>
+      <div id="tl-handle"></div>
+    </div>
+    <div id="tl-time">0 / 0</div>
+  </div>
+  <div id="palette"></div>
+</div>
+
+<div id="hint">
+  <span class="pulse">touch and drag</span><br>
+  <span style="font-size:11px;letter-spacing:.18em;opacity:.75">tap <b>Frame ✦</b> when done</span>
+</div>
+
+<script>
+'use strict';
+
+// ── Palette ──────────────────────────────────────────────────────────────────
+const COLORS = [
+  '#e85a3a', '#d6a93a', '#f0e0b4', '#2ba6a4',
+  '#1e3a8a', '#9a2424', '#6f8b3d', '#1a1820',
+];
+let activeColorIdx = 3;
+
+// ── State ────────────────────────────────────────────────────────────────────
+let symmetry = 8;
+const MIRROR = true;
+
+const bgCanvas = document.getElementById('bg-canvas');
+const sandCanvas = document.getElementById('sand-canvas');
+const bg = bgCanvas.getContext('2d');
+const sand = sandCanvas.getContext('2d', { willReadFrequently: false });
+
+let W = 0, H = 0;
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+let cx = 0, cy = 0, R = 0;
+
+let firstGesture = false;
+
+// stroke history — every grain batch is one stroke
+// { x, y, c, sym, mir }   (positions in CSS px)
+let strokes = [];
+let scrubIdx = 0;            // strokes[0..scrubIdx) are currently rendered
+let snapshots = [];          // [{ idx, canvas }]
+const SNAP_EVERY = 35;
+
+// gallery
+let gallery = [];            // { id, thumb (data url), strokes, sym }
+let editingId = null;        // gallery id we're currently editing (or null = fresh)
+
+// dissolve / phase
+let phase = 'idle';          // 'idle' | 'dissolving' | 'blooming'
+let particles = null;
+let dissolveStartT = 0;
+const DISSOLVE_MAX_S = 7;    // hard ceiling for spiral phase
+const DWELL_MS = 1400;
+let dwellTimer = null;
+let ghostSnapshot = null;    // canvas snapshot taken before dissolve starts
+let dominantRGB = { r: 200, g: 180, b: 100 };
+
+// ── Resize / mandala guide ──────────────────────────────────────────────────
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  for (const c of [bgCanvas, sandCanvas]) {
+    c.width = Math.floor(W * DPR);
+    c.height = Math.floor(H * DPR);
+  }
+  bg.setTransform(DPR, 0, 0, DPR, 0, 0);
+  sand.setTransform(DPR, 0, 0, DPR, 0, 0);
+  cx = W / 2;
+  cy = H / 2 - Math.min(28, H * 0.04);
+  R = Math.min(W, H) * 0.40;
+  drawMandalaGuide();
+  positionBindu();
+  rerender(scrubIdx, true);   // re-render with new dims
+}
+
+function positionBindu() {
+  const b = document.getElementById('bindu');
+  b.style.left = cx + 'px';
+  b.style.top  = cy + 'px';
+}
+
+function drawMandalaGuide() {
+  bg.setTransform(DPR, 0, 0, DPR, 0, 0);
+  bg.clearRect(0, 0, W, H);
+  const dim    = 'rgba(244,235,208,0.06)';
+  const accent = 'rgba(244,235,208,0.10)';
+  const ringStroke = (r, c, lw) => {
+    bg.strokeStyle = c; bg.lineWidth = lw;
+    bg.beginPath(); bg.arc(cx, cy, r, 0, Math.PI * 2); bg.stroke();
+  };
+  ringStroke(R, accent, 1.5);
+  ringStroke(R * 0.78, dim, 1);
+  ringStroke(R * 0.55, dim, 1);
+  ringStroke(R * 0.30, dim, 1);
+  ringStroke(R * 0.10, accent, 1.2);
+
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    bg.beginPath();
+    bg.moveTo(cx + Math.cos(a) * R * 0.10, cy + Math.sin(a) * R * 0.10);
+    bg.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+    bg.strokeStyle = dim; bg.stroke();
+  }
+
+  bg.strokeStyle = accent;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    bg.beginPath();
+    bg.arc(cx + Math.cos(a) * R * 0.55, cy + Math.sin(a) * R * 0.55, R * 0.16, 0, Math.PI * 2);
+    bg.stroke();
+  }
+
+  bg.strokeStyle = 'rgba(244,235,208,0.05)';
+  bg.beginPath();
+  const scN = 32;
+  for (let i = 0; i <= scN; i++) {
+    const a = (i / scN) * Math.PI * 2;
+    const r = R * (1.04 + Math.sin(a * scN / 2) * 0.012);
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (i === 0) bg.moveTo(x, y); else bg.lineTo(x, y);
+  }
+  bg.stroke();
+}
+
+// ── Painting one stroke (grain batch w/ N-fold symmetry) ─────────────────────
+function paintStroke(s) {
+  const dx = s.x - cx, dy = s.y - cy;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  if (r > R * 1.04) return;
+  const n = s.sym || 8;
+  const grains = 4;
+  const variance = 1.5;
+  sand.fillStyle = s.c;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const rx = dx * ca - dy * sa;
+    const ry = dx * sa + dy * ca;
+    paintGrains(cx + rx, cy + ry, grains, variance);
+    if (s.mir !== false) paintGrains(cx + rx, cy - ry, grains, variance);
+  }
+}
+function paintGrains(x, y, count, variance) {
+  for (let i = 0; i < count; i++) {
+    const jx = (Math.random() - 0.5) * variance * 4;
+    const jy = (Math.random() - 0.5) * variance * 4;
+    const rad = 1.4 + Math.random() * 1.6;
+    sand.beginPath();
+    sand.arc(x + jx, y + jy, rad, 0, Math.PI * 2);
+    sand.fill();
+  }
+}
+
+// ── Stroke recording + snapshot system ───────────────────────────────────────
+function recordStroke(x, y) {
+  // truncate any "future" strokes if scrubbed back
+  if (scrubIdx < strokes.length) {
+    strokes.length = scrubIdx;
+    snapshots = snapshots.filter(s => s.idx <= scrubIdx);
+  }
+  const s = { x, y, c: COLORS[activeColorIdx], sym: symmetry, mir: MIRROR };
+  strokes.push(s);
+  scrubIdx++;
+  paintStroke(s);
+  if (scrubIdx > 0 && scrubIdx % SNAP_EVERY === 0) takeSnapshot();
+  updateTimelineUI();
+  updateFrameBtn();
+}
+
+function takeSnapshot() {
+  const c = document.createElement('canvas');
+  c.width = sandCanvas.width;
+  c.height = sandCanvas.height;
+  c.getContext('2d').drawImage(sandCanvas, 0, 0);
+  snapshots.push({ idx: scrubIdx, canvas: c });
+  // bound memory but never evict the idx=0 base (it holds the post-dissolve ghost)
+  if (snapshots.length > 12) {
+    if (snapshots[0].idx === 0) snapshots.splice(1, 1);
+    else snapshots.shift();
+  }
+}
+
+function rerender(targetIdx, force = false) {
+  // pick latest snapshot ≤ targetIdx
+  let snap = null;
+  for (let i = snapshots.length - 1; i >= 0; i--) {
+    if (snapshots[i].idx <= targetIdx) { snap = snapshots[i]; break; }
+  }
+  // clear sand
+  sand.setTransform(1, 0, 0, 1, 0, 0);
+  sand.clearRect(0, 0, sandCanvas.width, sandCanvas.height);
+  let from = 0;
+  if (snap) {
+    sand.drawImage(snap.canvas, 0, 0);
+    from = snap.idx;
+  }
+  sand.setTransform(DPR, 0, 0, DPR, 0, 0);
+  for (let i = from; i < targetIdx; i++) paintStroke(strokes[i]);
+  scrubIdx = targetIdx;
+  if (!force) updateTimelineUI();
+}
+
+// ── Drawing input ────────────────────────────────────────────────────────────
+let drawing = false;
+let lastDrawX = 0, lastDrawY = 0;
+
+function pointerPos(e) {
+  const r = sandCanvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function onDown(e) {
+  if (e.target !== sandCanvas) return;
+  if (phase === 'dissolving') return;
+  const p = pointerPos(e);
+  drawing = true;
+  lastDrawX = p.x; lastDrawY = p.y;
+  if (!firstGesture) {
+    firstGesture = true;
+    document.getElementById('hint').classList.add('hide');
+    audio.onFirstGesture();
+  }
+  recordStroke(p.x, p.y);
+  audio.grain();
+  sandCanvas.setPointerCapture(e.pointerId);
+  e.preventDefault();
+}
+
+function onMove(e) {
+  if (!drawing) return;
+  const p = pointerPos(e);
+  const dx = p.x - lastDrawX, dy = p.y - lastDrawY;
+  const d = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.ceil(d / 6));
+  for (let i = 1; i <= steps; i++) {
+    const ix = lastDrawX + (dx * i) / steps;
+    const iy = lastDrawY + (dy * i) / steps;
+    recordStroke(ix, iy);
+  }
+  lastDrawX = p.x; lastDrawY = p.y;
+  audio.grain();
+}
+
+function onUp(e) {
+  drawing = false;
+  try { sandCanvas.releasePointerCapture(e.pointerId); } catch (e) {}
+}
+
+sandCanvas.addEventListener('pointerdown',   onDown);
+sandCanvas.addEventListener('pointermove',   onMove);
+sandCanvas.addEventListener('pointerup',     onUp);
+sandCanvas.addEventListener('pointercancel', onUp);
+sandCanvas.addEventListener('pointerleave',  onUp);
+
+// ── Timeline scrubber ────────────────────────────────────────────────────────
+const tl = document.getElementById('timeline');
+const tlFill = document.getElementById('tl-fill');
+const tlHandle = document.getElementById('tl-handle');
+const tlTime = document.getElementById('tl-time');
+let tlDragging = false;
+
+function updateTimelineUI() {
+  const total = strokes.length;
+  const pct = total === 0 ? 0 : (scrubIdx / total) * 100;
+  tlFill.style.width = pct + '%';
+  tlHandle.style.left = pct + '%';
+  tlTime.textContent = scrubIdx + ' / ' + total;
+  tl.classList.toggle('empty', total === 0);
+}
+
+function tlPointerToIdx(e) {
+  const r = tl.getBoundingClientRect();
+  const x = e.clientX - r.left - 14;   // 14 = padding
+  const w = r.width - 28;
+  const pct = Math.max(0, Math.min(1, x / w));
+  return Math.round(pct * strokes.length);
+}
+
+tl.addEventListener('pointerdown', (e) => {
+  if (strokes.length === 0) return;
+  e.preventDefault(); e.stopPropagation();
+  tlDragging = true;
+  tl.setPointerCapture(e.pointerId);
+  rerender(tlPointerToIdx(e));
+  audio.scrubTick();
+});
+tl.addEventListener('pointermove', (e) => {
+  if (!tlDragging) return;
+  rerender(tlPointerToIdx(e));
+  audio.scrubTick();
+});
+tl.addEventListener('pointerup', (e) => {
+  tlDragging = false;
+  try { tl.releasePointerCapture(e.pointerId); } catch (e) {}
+});
+tl.addEventListener('pointercancel', () => { tlDragging = false; });
+
+// ── Palette + symmetry pill ──────────────────────────────────────────────────
+function buildPalette() {
+  const pal = document.getElementById('palette');
+  COLORS.forEach((c, i) => {
+    const el = document.createElement('div');
+    el.className = 'swatch' + (i === activeColorIdx ? ' active' : '');
+    el.style.background = c;
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      activeColorIdx = i;
+      document.querySelectorAll('.swatch').forEach((s, j) =>
+        s.classList.toggle('active', j === i));
+      audio.colorPick(i);
+    });
+    pal.appendChild(el);
+  });
+}
+buildPalette();
+
+document.querySelectorAll('#sym-pill button').forEach(btn => {
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    symmetry = parseInt(btn.dataset.n, 10);
+    document.querySelectorAll('#sym-pill button').forEach(b =>
+      b.classList.toggle('active', b === btn));
+    audio.symChange(symmetry);
+  });
+});
+
+// ── Frame button ─────────────────────────────────────────────────────────────
+const frameBtn = document.getElementById('frame-btn');
+const bindu    = document.getElementById('bindu');
+const ringProg = bindu.querySelector('.ring-progress');
+
+function updateFrameBtn() {
+  const enough = strokes.length >= 12;
+  frameBtn.disabled = !enough;
+  // bindu also only available when there's something worth dissolving
+  if (phase !== 'dissolving') bindu.hidden = !enough;
+}
+
+frameBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (frameBtn.disabled) return;
+  frameMandala();
+});
+
+// ── Bindu: long-press to dissolve ───────────────────────────────────────────
+bindu.addEventListener('pointerdown', (e) => {
+  e.preventDefault(); e.stopPropagation();
+  if (phase === 'dissolving') return;
+  if (strokes.length < 12) return;
+  bindu.setPointerCapture(e.pointerId);
+  bindu.classList.add('holding');
+  audio.dwellStart();
+  if (dwellTimer) clearTimeout(dwellTimer);
+  dwellTimer = setTimeout(() => {
+    bindu.classList.remove('holding');
+    ringProg.style.strokeDashoffset = 132;
+    audio.dwellStop();
+    startDissolve();
+    dwellTimer = null;
+  }, DWELL_MS);
+});
+function bindupCancel(e) {
+  if (dwellTimer) {
+    clearTimeout(dwellTimer);
+    dwellTimer = null;
+    audio.dwellStop();
+  }
+  bindu.classList.remove('holding');
+  ringProg.style.strokeDashoffset = 132;
+  try { bindu.releasePointerCapture(e.pointerId); } catch (e) {}
+}
+bindu.addEventListener('pointerup',     bindupCancel);
+bindu.addEventListener('pointercancel', bindupCancel);
+bindu.addEventListener('pointerleave',  bindupCancel);
+
+// ── Particle dissolve ────────────────────────────────────────────────────────
+function startDissolve() {
+  if (phase !== 'idle') return;
+  if (strokes.length === 0) return;
+  phase = 'dissolving';
+  bindu.hidden = true;
+  audio.bell();
+
+  // capture the canvas as the "ghost" that will remain after the bloom
+  ghostSnapshot = document.createElement('canvas');
+  ghostSnapshot.width  = sandCanvas.width;
+  ghostSnapshot.height = sandCanvas.height;
+  ghostSnapshot.getContext('2d').drawImage(sandCanvas, 0, 0);
+
+  // dominant color from strokes, for the bloom rings + tint
+  dominantRGB = dominantColorFromStrokes(strokes);
+
+  particles = extractParticles();
+  dissolveStartT = performance.now();
+  requestAnimationFrame(dissolveLoop);
+}
+
+function dominantColorFromStrokes(arr) {
+  if (!arr || !arr.length) return { r: 200, g: 180, b: 100 };
+  let r = 0, g = 0, b = 0;
+  for (const s of arr) {
+    const h = s.c.slice(1);
+    r += parseInt(h.slice(0, 2), 16);
+    g += parseInt(h.slice(2, 4), 16);
+    b += parseInt(h.slice(4, 6), 16);
+  }
+  return { r: r / arr.length | 0, g: g / arr.length | 0, b: b / arr.length | 0 };
+}
+
+function extractParticles() {
+  const wPx = sandCanvas.width;
+  const hPx = sandCanvas.height;
+  const data = sand.getImageData(0, 0, wPx, hPx).data;
+  // sample every Nth device-pixel to keep particle count manageable.
+  // Aim for ~6-9k particles.
+  const totalOpaque = wPx * hPx;
+  const targetCount = 7500;
+  // step in device px; aim for sqrt(area / targetCount) but skewed since
+  // not all pixels are opaque. Empirical: every 5 device-px works well.
+  const step = Math.max(3, Math.floor(Math.sqrt(totalOpaque / (targetCount * 6))));
+  const ps = [];
+  for (let py = 0; py < hPx; py += step) {
+    for (let px = 0; px < wPx; px += step) {
+      const i = (py * wPx + px) * 4;
+      const a = data[i + 3];
+      if (a < 60) continue;
+      ps.push({
+        x: px / DPR, y: py / DPR,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8,
+        r: data[i], g: data[i + 1], b: data[i + 2],
+        a: a / 255,
+        age: 0,
+      });
+    }
+  }
+  return ps;
+}
+
+let lastDissolveT = 0;
+function dissolveLoop(now) {
+  if (phase !== 'dissolving') return;
+  const dt = lastDissolveT ? Math.min(0.05, (now - lastDissolveT) / 1000) : 0.016;
+  lastDissolveT = now;
+  const elapsed = (now - dissolveStartT) / 1000;
+
+  // ── Update particles ──
+  // strength ramps up over the first 1.5s so motion starts subtle, then sucks in
+  const phaseRamp = Math.min(1, elapsed / 1.5);
+  const radialF     = (40 + 90 * phaseRamp);   // toward-center accel (px/s²)
+  const tangentialF = (130 + 80 * phaseRamp);  // perpendicular accel
+  const damping = 0.94;
+
+  for (const p of particles) {
+    const dx = cx - p.x, dy = cy - p.y;
+    const r  = Math.sqrt(dx * dx + dy * dy) + 1;
+    const nx = dx / r, ny = dy / r;
+    // Force = radial-in + tangential (perpendicular, counter-clockwise)
+    p.vx += (nx * radialF + (-ny) * tangentialF) * dt;
+    p.vy += (ny * radialF + ( nx) * tangentialF) * dt;
+    p.vx *= damping;
+    p.vy *= damping;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.age += dt;
+    // fade as they get close to center
+    if (r < 50) p.a *= (0.92 - 0.06 * phaseRamp);
+    // global slow fade in the last 30%
+    if (elapsed > DISSOLVE_MAX_S * 0.7) p.a *= 0.985;
+  }
+
+  // ── Render: motion trails via destination-out then particle dots ──
+  // Step 1: faint alpha-erase to leave a fading trail of past positions
+  sand.setTransform(1, 0, 0, 1, 0, 0);
+  sand.globalCompositeOperation = 'destination-out';
+  sand.fillStyle = 'rgba(0,0,0,0.18)';
+  sand.fillRect(0, 0, sandCanvas.width, sandCanvas.height);
+  sand.globalCompositeOperation = 'source-over';
+
+  // Step 2: paint particles in CSS-px space
+  sand.setTransform(DPR, 0, 0, DPR, 0, 0);
+  for (const p of particles) {
+    if (p.a <= 0.04) continue;
+    sand.globalAlpha = Math.min(1, p.a);
+    sand.fillStyle = `rgb(${p.r|0},${p.g|0},${p.b|0})`;
+    sand.fillRect(p.x - 1.2, p.y - 1.2, 2.6, 2.6);
+  }
+  sand.globalAlpha = 1;
+
+  // Step 3: central glow grows as particles converge
+  if (elapsed > 1.0) {
+    const t = Math.min((elapsed - 1.0) / 4.5, 1);
+    const peak = elapsed < (DISSOLVE_MAX_S * 0.7) ? t : (1 - (elapsed - DISSOLVE_MAX_S * 0.7) / (DISSOLVE_MAX_S * 0.3));
+    const size = 30 + 100 * Math.min(1, t);
+    const grad = sand.createRadialGradient(cx, cy, 0, cx, cy, size);
+    grad.addColorStop(0,   `rgba(244,235,208,${0.55 * peak})`);
+    grad.addColorStop(0.4, `rgba(214,169,58,${0.35 * peak})`);
+    grad.addColorStop(1,   'rgba(0,0,0,0)');
+    sand.fillStyle = grad;
+    sand.fillRect(0, 0, W, H);
+  }
+
+  // ── Cull faded particles ──
+  if (elapsed > 0.6) {
+    particles = particles.filter(p => p.a > 0.04);
+  }
+
+  // ── End conditions ──
+  if (particles.length < 30 || elapsed > DISSOLVE_MAX_S) {
+    endDissolve();
+    return;
+  }
+  requestAnimationFrame(dissolveLoop);
+}
+
+function endDissolve() {
+  // Phase 2: ripple bloom from center, leaves ghost layer behind for next round.
+  particles = null;
+  phase = 'blooming';
+  audio.thud();
+  setTimeout(() => audio.bloomBreath(), 120);
+
+  // wipe whatever remains of the dissolve trails
+  sand.setTransform(1, 0, 0, 1, 0, 0);
+  sand.clearRect(0, 0, sandCanvas.width, sandCanvas.height);
+  sand.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  const bloomStart = performance.now();
+  const BLOOM_MS = 3500;
+  const dom = dominantRGB;
+
+  function bloomLoop(now) {
+    if (phase !== 'blooming') return;
+    const t = (now - bloomStart) / BLOOM_MS;
+
+    // alpha-erase the previous frame so rings draw cleanly
+    sand.setTransform(1, 0, 0, 1, 0, 0);
+    sand.globalCompositeOperation = 'destination-out';
+    sand.fillStyle = 'rgba(0,0,0,0.18)';
+    sand.fillRect(0, 0, sandCanvas.width, sandCanvas.height);
+    sand.globalCompositeOperation = 'source-over';
+    sand.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    if (t < 1) {
+      // 3 staggered concentric rings expanding outward
+      const maxR = Math.max(W, H) * 0.75;
+      for (let i = 0; i < 3; i++) {
+        const lt = (t - i * 0.15);
+        if (lt < 0 || lt > 1) continue;
+        const rOuter = lt * maxR;
+        const a = (1 - lt) * 0.55;
+        sand.strokeStyle = `rgba(${dom.r},${dom.g},${dom.b},${a.toFixed(3)})`;
+        sand.lineWidth = 2 + lt * 6;
+        sand.beginPath();
+        sand.arc(cx, cy, rOuter, 0, Math.PI * 2);
+        sand.stroke();
+      }
+      // inner pulsating glow with the dominant color
+      const cgT = Math.sin(Math.min(1, t * 1.5) * Math.PI);   // peaks mid-bloom
+      const glowR = 35 + 80 * Math.min(1, t * 2);
+      const grad = sand.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+      grad.addColorStop(0,   `rgba(244,235,208,${(0.55 * cgT).toFixed(3)})`);
+      grad.addColorStop(0.4, `rgba(${dom.r},${dom.g},${dom.b},${(0.35 * cgT).toFixed(3)})`);
+      grad.addColorStop(1,   'rgba(0,0,0,0)');
+      sand.fillStyle = grad;
+      sand.fillRect(0, 0, W, H);
+      requestAnimationFrame(bloomLoop);
+      return;
+    }
+
+    // ── Bloom done. Settle into the next-round canvas: ghost layer + seed dot.
+    sand.setTransform(1, 0, 0, 1, 0, 0);
+    sand.clearRect(0, 0, sandCanvas.width, sandCanvas.height);
+
+    // ghost: previous mandala at low opacity becomes the foundation
+    if (ghostSnapshot) {
+      sand.globalAlpha = 0.13;
+      sand.drawImage(ghostSnapshot, 0, 0);
+      sand.globalAlpha = 1;
+    }
+
+    sand.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    // very faint warm-tone tint of dominant color across canvas
+    sand.fillStyle = `rgba(${dom.r},${dom.g},${dom.b},0.025)`;
+    sand.fillRect(0, 0, W, H);
+
+    // central seed — small persistent dot, an invitation
+    const seedR = 26;
+    const sg = sand.createRadialGradient(cx, cy, 0, cx, cy, seedR);
+    sg.addColorStop(0,   `rgba(244,235,208,0.55)`);
+    sg.addColorStop(0.5, `rgba(${dom.r},${dom.g},${dom.b},0.30)`);
+    sg.addColorStop(1,   'rgba(0,0,0,0)');
+    sand.fillStyle = sg;
+    sand.fillRect(0, 0, W, H);
+
+    // reset stroke history but KEEP the ghost on canvas for the next round.
+    // also bake the ghost as snapshot index 0 so scrubbing back to "0" still
+    // shows the ghost, not bare canvas.
+    strokes = [];
+    scrubIdx = 0;
+    snapshots = [];
+    const baseSnap = document.createElement('canvas');
+    baseSnap.width  = sandCanvas.width;
+    baseSnap.height = sandCanvas.height;
+    baseSnap.getContext('2d').drawImage(sandCanvas, 0, 0);
+    snapshots.push({ idx: 0, canvas: baseSnap });
+
+    editingId = null;
+    ghostSnapshot = null;
+    lastDissolveT = 0;
+    phase = 'idle';
+    updateTimelineUI();
+    updateFrameBtn();
+    renderGallery();
+  }
+
+  requestAnimationFrame(bloomLoop);
+}
+
+function frameMandala() {
+  // make a 192px round thumbnail
+  const TS = 192;
+  const t = document.createElement('canvas');
+  t.width = TS; t.height = TS;
+  const tc = t.getContext('2d');
+  tc.fillStyle = '#0a0612';
+  tc.fillRect(0, 0, TS, TS);
+  // crop the sand canvas around the mandala center, scale to TS
+  const srcSize = Math.min(sandCanvas.width, sandCanvas.height);
+  const srcX = (sandCanvas.width  - srcSize) / 2;
+  const srcY = (sandCanvas.height - srcSize) / 2 - Math.min(28, H * 0.04) * DPR;
+  tc.drawImage(sandCanvas, srcX, srcY, srcSize, srcSize, 0, 0, TS, TS);
+  const thumbUrl = t.toDataURL('image/png');
+
+  // either overwrite the gallery item we were editing, or push new
+  const item = {
+    id:    editingId || ('m_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)),
+    thumb: thumbUrl,
+    strokes: strokes.slice(),
+    sym: symmetry,
+    ts: Date.now(),
+  };
+  if (editingId) {
+    const i = gallery.findIndex(g => g.id === editingId);
+    if (i >= 0) gallery[i] = item;
+    else        gallery.unshift(item);
+  } else {
+    gallery.unshift(item);
+  }
+  saveGallery();
+  renderGallery();
+  audio.frameSnap();
+  // little flash on the gallery item
+  setTimeout(() => {
+    const el = document.querySelector(`.thumb[data-id="${item.id}"]`);
+    if (el) {
+      el.animate(
+        [{ transform: 'scale(1.2)', filter: 'brightness(1.5)' },
+         { transform: 'scale(1.0)', filter: 'brightness(1.0)' }],
+        { duration: 600, easing: 'ease-out' });
+    }
+  }, 30);
+  // start fresh
+  newCanvas();
+}
+
+function newCanvas() {
+  strokes = [];
+  scrubIdx = 0;
+  snapshots = [];
+  editingId = null;
+  sand.setTransform(1, 0, 0, 1, 0, 0);
+  sand.clearRect(0, 0, sandCanvas.width, sandCanvas.height);
+  sand.setTransform(DPR, 0, 0, DPR, 0, 0);
+  updateTimelineUI();
+  updateFrameBtn();
+  renderGallery();
+}
+
+// ── Gallery ──────────────────────────────────────────────────────────────────
+function loadGallery() {
+  try {
+    const raw = localStorage.getItem('sand-mandala-gallery');
+    if (raw) {
+      const arr = JSON.parse(raw);
+      gallery = Array.isArray(arr) ? arr : [];
+    }
+  } catch (e) { gallery = []; }
+}
+function saveGallery() {
+  try {
+    localStorage.setItem('sand-mandala-gallery', JSON.stringify(gallery));
+  } catch (e) { /* quota etc. — ignore */ }
+}
+
+function renderGallery() {
+  const g = document.getElementById('gallery');
+  g.innerHTML = '';
+  for (const item of gallery) {
+    const el = document.createElement('div');
+    el.className = 'thumb' + (item.id === editingId ? ' editing' : '');
+    el.dataset.id = item.id;
+    el.style.backgroundImage = `url('${item.thumb}')`;
+    el.title = new Date(item.ts).toLocaleString();
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target.classList.contains('x')) return;   // delete handled separately
+      e.preventDefault(); e.stopPropagation();
+      reopenFromGallery(item);
+    });
+    const x = document.createElement('div');
+    x.className = 'x';
+    x.textContent = '×';
+    x.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      gallery = gallery.filter(g => g.id !== item.id);
+      if (editingId === item.id) editingId = null;
+      saveGallery();
+      renderGallery();
+      audio.tap();
+    });
+    el.appendChild(x);
+    g.appendChild(el);
+  }
+}
+
+function reopenFromGallery(item) {
+  strokes = (item.strokes || []).map(s => ({ ...s }));
+  snapshots = [];
+  scrubIdx = strokes.length;
+  symmetry = item.sym || 8;
+  document.querySelectorAll('#sym-pill button').forEach(b =>
+    b.classList.toggle('active', parseInt(b.dataset.n, 10) === symmetry));
+  editingId = item.id;
+  // re-render full
+  sand.setTransform(1, 0, 0, 1, 0, 0);
+  sand.clearRect(0, 0, sandCanvas.width, sandCanvas.height);
+  sand.setTransform(DPR, 0, 0, DPR, 0, 0);
+  for (const s of strokes) paintStroke(s);
+  updateTimelineUI();
+  updateFrameBtn();
+  renderGallery();
+  audio.tap();
+}
+
+// ── Audio: NO ambient drone — every operation has its own tactile sound ────
+const audio = (() => {
+  let ac = null, master = null;
+  let lastGrainAt = 0, lastScrubAt = 0;
+  let dwell = null;
+  let noiseBuf = null;
+
+  function ensureCtx() {
+    if (!ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ac = new AC();
+      master = ac.createGain();
+      master.gain.value = 1;
+      master.connect(ac.destination);
+    }
+    if (ac.state !== 'running') ac.resume();
+    return ac.state === 'running';
+  }
+
+  function getNoiseBuf() {
+    if (!noiseBuf) {
+      const len = Math.floor(ac.sampleRate * 0.5);
+      noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return noiseBuf;
+  }
+
+  function noiseBurst(durMs, ampPeak, freqLo, freqHi, q, type='bandpass') {
+    if (!ensureCtx()) return;
+    const t = ac.currentTime;
+    const dur = durMs / 1000;
+    const src = ac.createBufferSource();
+    src.buffer = getNoiseBuf();
+    src.loop = true;
+    const filt = ac.createBiquadFilter();
+    filt.type = type;
+    filt.frequency.value = freqLo + Math.random() * (freqHi - freqLo);
+    filt.Q.value = q;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(ampPeak, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(filt); filt.connect(g); g.connect(master);
+    src.start(t); src.stop(t + dur + 0.05);
+    setTimeout(() => {
+      try { src.disconnect(); filt.disconnect(); g.disconnect(); } catch (e) {}
+    }, durMs + 200);
+  }
+
+  function osc(freq, durMs, ampPeak, type='sine', detuneJitter=0) {
+    if (!ensureCtx()) return;
+    const t = ac.currentTime;
+    const dur = durMs / 1000;
+    const o = ac.createOscillator();
+    o.type = type;
+    o.frequency.value = freq * (1 + (Math.random() - 0.5) * detuneJitter);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(ampPeak, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+    setTimeout(() => { try { o.disconnect(); g.disconnect(); } catch (e) {} }, durMs + 100);
+  }
+
+  // ── Operation sounds ──────────────────────────────────────────────────────
+
+  function grain() {            // sand falling — drawing
+    const now = performance.now();
+    if (now - lastGrainAt < 70) return;
+    lastGrainAt = now;
+    noiseBurst(36 + Math.random() * 26, 0.020, 1500, 4500, 3);
+  }
+
+  function colorPick(idx) {     // pentatonic + soft body click
+    const freqs = [220, 261.63, 311.13, 349.23, 392, 440, 523.25, 587.33];
+    osc(freqs[idx % 8], 220, 0.045, 'sine', 0.005);
+    noiseBurst(18, 0.010, 200, 600, 1.2);
+  }
+
+  function symChange(n) {       // pitched triangle click
+    const freqs = { 4: 196, 6: 261.63, 8: 329.63, 12: 440 };
+    osc(freqs[n] || 392, 80, 0.040, 'triangle', 0);
+    noiseBurst(15, 0.008, 1000, 2000, 1.5);
+  }
+
+  function scrubTick() {        // film-rewind ticks
+    const now = performance.now();
+    if (now - lastScrubAt < 35) return;
+    lastScrubAt = now;
+    osc(900 + Math.random() * 800, 35, 0.012, 'square', 0);
+  }
+
+  function frameSnap() {        // camera shutter K-clack
+    noiseBurst(22, 0.05, 500, 1500, 2);
+    setTimeout(() => noiseBurst(34, 0.04, 200, 800, 2), 48);
+  }
+
+  function tap() {              // gallery thumb / × button
+    osc(800, 60, 0.025, 'sine', 0.01);
+  }
+
+  function bell() {             // dissolve start — same as before
+    if (!ensureCtx()) return;
+    const t = ac.currentTime;
+    const out = ac.createGain(); out.gain.value = 0; out.connect(master);
+    const partials = [880, 1320, 1760, 2640];
+    const oscs = partials.map((f, i) => {
+      const o = ac.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.002);
+      const g = ac.createGain(); g.gain.value = 1 / (i + 1);
+      o.connect(g); g.connect(out);
+      o.start(t); o.stop(t + 4.5);
+      return { o, g };
+    });
+    out.gain.setValueAtTime(0, t);
+    out.gain.linearRampToValueAtTime(0.10, t + 0.04);
+    out.gain.exponentialRampToValueAtTime(0.0008, t + 4.0);
+    setTimeout(() => {
+      oscs.forEach(({ o, g }) => { try { o.disconnect(); g.disconnect(); } catch (e) {} });
+      try { out.disconnect(); } catch (e) {}
+    }, 4800);
+  }
+
+  function thud() {             // sub-bass when particles compress at center
+    if (!ensureCtx()) return;
+    const t = ac.currentTime;
+    const o = ac.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(35, t + 0.4);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.18, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.6);
+    setTimeout(() => { try { o.disconnect(); g.disconnect(); } catch (e) {} }, 700);
+  }
+
+  function bloomBreath() {      // long exhale during ripple-bloom
+    if (!ensureCtx()) return;
+    const t = ac.currentTime;
+    const dur = 3.5;
+    const src = ac.createBufferSource();
+    src.buffer = getNoiseBuf();
+    src.loop = true;
+    const filt = ac.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.setValueAtTime(400, t);
+    filt.frequency.linearRampToValueAtTime(1800, t + dur * 0.5);
+    filt.frequency.linearRampToValueAtTime(220, t + dur);
+    filt.Q.value = 0.5;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.045, t + 0.4);
+    g.gain.linearRampToValueAtTime(0.025, t + dur * 0.6);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    src.connect(filt); filt.connect(g); g.connect(master);
+    src.start(t); src.stop(t + dur + 0.1);
+    setTimeout(() => {
+      try { src.disconnect(); filt.disconnect(); g.disconnect(); } catch (e) {}
+    }, dur * 1000 + 200);
+  }
+
+  function dwellStart() {       // long-press on bindu rises
+    if (!ensureCtx()) return;
+    if (dwell) return;
+    const t = ac.currentTime;
+    const o = ac.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = 55;
+    const f = ac.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 220; f.Q.value = 0.8;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 1.4);
+    o.connect(f); f.connect(g); g.connect(master);
+    o.start(t);
+    dwell = { o, f, g };
+  }
+  function dwellStop() {
+    if (!dwell) return;
+    const t = ac.currentTime;
+    const d = dwell; dwell = null;
+    d.g.gain.cancelScheduledValues(t);
+    d.g.gain.setValueAtTime(d.g.gain.value, t);
+    d.g.gain.linearRampToValueAtTime(0, t + 0.18);
+    setTimeout(() => {
+      try { d.o.stop(); d.o.disconnect(); d.f.disconnect(); d.g.disconnect(); } catch (e) {}
+    }, 250);
+  }
+
+  return {
+    onFirstGesture() { ensureCtx(); },
+    grain, colorPick, symChange, scrubTick, frameSnap,
+    bell, thud, bloomBreath, tap,
+    dwellStart, dwellStop,
+  };
+})();
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', resize);
+loadGallery();
+renderGallery();
+resize();
+updateTimelineUI();
+updateFrameBtn();
+</script>
+</body>
+</html>
