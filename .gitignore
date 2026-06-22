@@ -1,6 +1,4 @@
+node_modules
+dist
+_*.py
 .DS_Store
-node_modules/
-*.log
-__pycache__/
-*.pyc
-_poster_raw.*
